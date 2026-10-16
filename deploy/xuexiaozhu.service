@@ -1,0 +1,18 @@
+[Unit]
+Description=学习提醒助手 Web 服务
+After=network.target
+
+[Service]
+Type=simple
+User=www
+WorkingDirectory=/opt/xuexiaozhu
+# 数据目录独立于代码目录，方便备份与云盘挂载
+Environment=HOST=0.0.0.0
+Environment=PORT=8000
+Environment=APP_DATA_DIR=/opt/xuexiaozhu/data
+ExecStart=/opt/xuexiaozhu/.venv/bin/python -m app.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

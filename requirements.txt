@@ -6,3 +6,5 @@ lxml
 apscheduler
 winotify; sys_platform == "win32"
 python-dotenv
+# PythonAnywhere(WSGI 托管) 的 ASGI->WSGI 桥接
+a2wsgi
