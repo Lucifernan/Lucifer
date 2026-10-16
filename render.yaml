@@ -1,0 +1,21 @@
+# Render 一键部署配置：把这个仓库连到 Render → New → Blueprint 即可
+services:
+  - type: web
+    name: xuexiaozhu
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # 由 app.main:run() 读取 HOST/PORT 环境变量
+    startCommand: python -m app.main
+    envVars:
+      - key: APP_DATA_DIR
+        value: /data
+      - key: HOST
+        value: 0.0.0.0
+      - key: PYTHON_VERSION
+        value: 3.11.9
+    healthCheckPath: /api/overview
+    disks:
+      - name: data
+        mountPath: /data
+        sizeGB: 1

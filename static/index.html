@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学小助 · 大学生教学指导提醒智能体</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">学小助<small>大学生教学指导提醒智能体</small></div>
+    <nav>
+      <button class="nav-item active" data-page="dashboard">仪表盘</button>
+      <button class="nav-item" data-page="notices">通知动态<span class="nav-badge" id="badgeUnread" style="display:none">0</span></button>
+      <button class="nav-item" data-page="files">课程文件</button>
+      <button class="nav-item" data-page="chat">问答助手</button>
+      <button class="nav-item" data-page="settings">设置</button>
+    </nav>
+    <div class="sync-box">
+      <button class="btn-sync" id="btnSync">立即同步</button>
+      <div id="syncStatus">尚未同步</div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <!-- 仪表盘 -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-title">仪表盘</div>
+      <div class="page-sub" id="dashSub">正在加载…</div>
+      <div class="stats">
+        <div class="stat"><div class="num" id="stUnread">-</div><div class="label">未读消息</div></div>
+        <div class="stat"><div class="num" id="stNotices">-</div><div class="label">通知总数</div></div>
+        <div class="stat"><div class="num" id="stCourses">-</div><div class="label">我的课程</div></div>
+        <div class="stat"><div class="num" id="stFiles">-</div><div class="label">课程文件</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <h3>最近通知 <a class="more" href="#" data-goto="notices">全部 →</a></h3>
+          <div id="dashNotices"><div class="empty">加载中…</div></div>
+        </div>
+        <div class="card">
+          <h3>最近同步</h3>
+          <div id="dashSync"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 通知 -->
+    <section class="page" id="page-notices">
+      <div class="page-title">通知动态</div>
+      <div class="page-sub">超星学习通的课程互动与智慧树（知到）的学习通知</div>
+      <div class="toolbar">
+        <select id="filterSource" style="width:130px">
+          <option value="">全部来源</option>
+          <option value="chaoxing">超星学习通</option>
+          <option value="zhihuishu">智慧树（知到）</option>
+        </select>
+        <label><input type="checkbox" id="filterUnread"> 只看未读</label>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="btnReadAll">全部标记已读</button>
+      </div>
+      <div class="card" id="noticeList"><div class="empty">暂无数据，点击左下角「立即同步」</div></div>
+    </section>
+
+    <!-- 文件 -->
+    <section class="page" id="page-files">
+      <div class="page-title">课程文件</div>
+      <div class="page-sub">从超星课程章节中采集的课件 / 文档</div>
+      <div class="toolbar">
+        <input type="text" id="fileSearch" placeholder="搜索文件名或课程名…" style="width:260px">
+        <div class="spacer"></div>
+        <span class="page-sub" id="fileCount" style="margin:0"></span>
+      </div>
+      <div class="card"><table id="fileTable">
+        <thead><tr><th style="width:26%">课程</th><th>文件名</th><th style="width:12%">类型</th><th style="width:10%">操作</th></tr></thead>
+        <tbody><tr><td colspan="4" class="empty">暂无数据</td></tr></tbody>
+      </table></div>
+    </section>
+
+    <!-- 问答 -->
+    <section class="page" id="page-chat">
+      <div class="page-title">问答助手</div>
+      <div class="page-sub">基于你已采集的通知、课程、文件本地检索作答，无需任何 API Key，数据不出本机</div>
+      <div class="chat-wrap">
+        <div class="chat-msgs" id="chatMsgs">
+          <div class="msg assistant"><div class="bubble">你好，我是学小助！先在「设置」里填好 Cookie，然后点「立即同步」，就可以问我：
+「最近有什么新通知？」「我有哪些课程？」「有哪些课程文件？」</div></div>
+        </div>
+        <div class="suggestions">
+          <span class="chip">最近有什么新通知？</span>
+          <span class="chip">我有哪些课程？</span>
+          <span class="chip">有哪些课程文件？</span>
+          <span class="chip">超星上有什么新消息？</span>
+        </div>
+        <div class="chat-input">
+          <input type="text" id="chatInput" placeholder="输入你的问题，回车发送…">
+          <button class="btn" id="btnSend">发送</button>
+          <button class="btn gray" id="btnClearChat">清空</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="page" id="page-settings">
+      <div class="page-title">设置</div>
+      <div class="page-sub">Cookie 获取方式：浏览器登录目标网站 → F12 → 网络(Network) → 刷新 → 点第一个请求 → 请求标头 → 复制 Cookie</div>
+
+      <div class="card">
+        <h3>超星学习通</h3>
+        <div class="form-row">
+          <label>Cookie</label>
+          <div>
+            <input type="password" id="setChxCookie" placeholder="mooc1-1.chaoxing.com 的 Cookie">
+            <div class="hint">登录 mooc1-1.chaoxing.com 后复制，Cookie 过期后重新复制即可。</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>互动页面 URL</label>
+          <input type="text" id="setChxInteraction" placeholder="https://mooc1-1.chaoxing.com/visit/interaction?...">
+        </div>
+        <div class="form-row">
+          <label>抓取课程文件</label>
+          <div><label><input type="checkbox" id="setChxFiles"> 启用（较耗时，每 6 小时最多全量一次）</label></div>
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div><button class="btn ghost" data-ping="chaoxing">测试超星连接</button> <span class="hint" id="pingCx"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>智慧树（知到）</h3>
+        <div class="form-row">
+          <label>Cookie</label>
+          <div>
+            <input type="password" id="setZhsCookie" placeholder="www.zhihuishu.com 的 Cookie">
+            <div class="hint">登录 zhihuishu.com 后复制；失效后重新复制。</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label>消息中心 URL</label>
+          <div>
+            <input type="text" id="setZhsMessageUrl" placeholder="留空自动尝试常见消息中心入口">
+            <div class="hint">若自动抓取为空，可在知到里打开消息/通知页面，把地址栏 URL 粘到这里。</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div><button class="btn ghost" data-ping="zhihuishu">测试智慧树连接</button> <span class="hint" id="pingZhs"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>提醒与同步</h3>
+        <div class="form-row">
+          <label>同步间隔（分钟）</label>
+          <input type="number" id="setInterval" min="5" style="width:120px">
+        </div>
+        <div class="form-row">
+          <label>每日简报时间</label>
+          <input type="text" id="setDigest" placeholder="08:00" style="width:120px">
+        </div>
+        <div class="form-row">
+          <label>提醒开关</label>
+          <div class="switch">
+            <label><input type="checkbox" id="setNtNotice"> 新通知</label>
+            <label><input type="checkbox" id="setNtDigest"> 每日简报</label>
+          </div>
+        </div>
+        <div class="form-row">
+          <label></label>
+          <div><button class="btn ghost" id="btnTestNotify">发送测试提醒</button></div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="btnSave">保存设置</button>
+        <span class="hint" id="saveTip"></span>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# 本地隐私数据（Cookie、聊天记录、SQLite、调试响应）——绝不上传
+data/
+# 环境变量
+.env
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
