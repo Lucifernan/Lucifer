@@ -104,6 +104,17 @@ nav { padding: 12px 10px; flex: 1; overflow-y: auto; }
 }
 .stat .num { font-size: 30px; font-weight: 700; color: var(--primary); }
 .stat .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.stat .ico {
+  position: absolute; right: 14px; top: 14px; z-index: 1;
+  width: 34px; height: 34px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  background: #eef0ff; color: var(--primary);
+}
+.stat .ico svg { width: 19px; height: 19px; }
+.stat:nth-child(1) .ico { background: #fdeef0; color: var(--red); }      /* 未读=信封 */
+.stat:nth-child(2) .ico { background: #fff3e4; color: var(--orange); }   /* 通知=铃铛 */
+.stat:nth-child(3) .ico { background: #e8f7ef; color: var(--green); }    /* 课程=书本 */
+.stat:nth-child(4) .ico { background: #eef0ff; color: var(--primary); }  /* 文件=文档 */
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
 
@@ -212,3 +223,62 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); }
 .notice-item.open .notice-content { display: block; }
 .clickable { cursor: pointer; }
 .clickable:hover .title { color: var(--primary); }
+
+/* 已读通知：整体全灰，一眼区分未读 */
+.notice-item.read .title,
+.notice-item.read .meta,
+.notice-item.read .notice-content { color: #b6bcc9 !important; }
+.notice-item.read .tag { background: #f1f2f6 !important; color: #a4aab8 !important; }
+.notice-item.read:hover .title { color: #8b93a5 !important; }
+
+/* 查看原文图标按钮 */
+.link-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 7px; padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: #fafbfe; color: var(--primary);
+  font-size: 12px; text-decoration: none; width: fit-content;
+}
+.link-btn svg { width: 13px; height: 13px; }
+.link-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+.notice-item.read .link-btn { color: #a4aab8; }
+.notice-item.read .link-btn:hover { background: #b6bcc9; color: #fff; border-color: #b6bcc9; }
+
+/* 文件搜索框 + 图标 */
+.search-box { position: relative; width: 260px; }
+.search-box .search-ico {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 15px; height: 15px; color: var(--muted); pointer-events: none;
+}
+.search-box input { padding-left: 31px; }
+
+/* 学习简报 */
+.brief-card .brief-tabs { float: right; display: flex; gap: 6px; }
+.brief-tab {
+  padding: 3px 12px; border: 1px solid var(--line); border-radius: 13px;
+  background: #fff; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.brief-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.brief-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+.brief-line {
+  font-size: 13px; line-height: 1.8; color: var(--text);
+  padding: 5px 0 5px 12px; border-left: 3px solid #eef0ff;
+  margin-bottom: 6px; border-radius: 0 6px 6px 0; background: #fafbfe;
+}
+.brief-line:hover { border-left-color: var(--primary); }
+
+/* 一键登录（超星） */
+.form-row.highlight {
+  background: linear-gradient(135deg, #eef0ff, #f7f8ff);
+  border: 1px dashed var(--primary); border-radius: 10px; padding: 12px;
+  align-items: flex-start;
+}
+.form-row.highlight label { font-weight: 600; }
+.auto-login .hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 8px; }
+.login-line { display: flex; gap: 8px; flex-wrap: wrap; }
+.login-line input { width: 190px; }
+.login-line button { white-space: nowrap; }
+
+/* 问答里的原文链接 */
+.chat-link { color: var(--primary); word-break: break-all; }
+.msg.user .chat-link { color: #fff; text-decoration: underline; }

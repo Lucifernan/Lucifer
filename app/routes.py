@@ -7,7 +7,7 @@ from . import chat, config, db
 from .crawlers import chaoxing as cx
 from .crawlers import zhihuishu as zhs
 from .notifier import notify
-from .scheduler import restart_sync_job
+from .scheduler import build_brief, restart_sync_job
 from .sync import run_sync
 
 router = APIRouter(prefix="/api")
@@ -25,20 +25,38 @@ def overview():
     courses_total = db.one("SELECT COUNT(*) c FROM courses")["c"]
     from datetime import date, datetime, timedelta
 
-    soon = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-    new_week = db.one(
-        "SELECT COUNT(*) c FROM notices WHERE fetched_at >= ?",
-        (date.today().strftime("%Y-%m-%d"),),
+    today = date.today().strftime("%Y-%m-%d")
+    # 本周一 00:00 起
+    monday = (date.today() - timedelta(days=date.today().weekday())).strftime("%Y-%m-%d")
+    new_today = db.one(
+        "SELECT COUNT(*) c FROM notices WHERE fetched_at >= ?", (today,)
     )["c"]
+    new_week = db.one(
+        "SELECT COUNT(*) c FROM notices WHERE fetched_at >= ?", (monday,)
+    )["c"]
+    week_notices = db.query(
+        "SELECT * FROM notices WHERE fetched_at >= ? ORDER BY fetched_at DESC LIMIT 8",
+        (monday,),
+    )
     return {
         "unread": unread,
         "notices_total": notices_total,
         "latest_notices": latest_notices,
         "files_total": files_total,
         "courses_total": courses_total,
+        "new_today": new_today,
         "new_week": new_week,
+        "week_notices": week_notices,
         "sync_state": _sync_state,
     }
+
+
+# ------------------------------------------------------------------ 学习简报
+@router.get("/briefing")
+def briefing(scope: str = "today"):
+    if scope not in ("today", "week"):
+        raise HTTPException(400, "scope 必须是 today 或 week")
+    return build_brief(scope)
 
 
 # ------------------------------------------------------------------ 数据查询
@@ -156,6 +174,20 @@ def ping(payload: dict = Body(...)):
 def test_notify():
     ok = notify("学习提醒助手", "这是一条测试提醒，看到即表示通知正常！")
     return {"ok": ok}
+
+
+# ------------------------------------------------------------------ 一键获取超星 Cookie
+@router.post("/chaoxing/login")
+def chaoxing_login(payload: dict = Body(...)):
+    """傻瓜式：输入超星账号密码 → 系统自动登录并保存 Cookie。"""
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+    if not username or not password:
+        raise HTTPException(400, "请填写超星账号和密码")
+    try:
+        return cx.auto_login(username, password)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ------------------------------------------------------------------ 问答

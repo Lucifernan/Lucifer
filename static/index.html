@@ -29,19 +29,48 @@
       <div class="page-title">仪表盘</div>
       <div class="page-sub" id="dashSub">正在加载…</div>
       <div class="stats">
-        <div class="stat"><div class="num" id="stUnread">-</div><div class="label">未读消息</div></div>
-        <div class="stat"><div class="num" id="stNotices">-</div><div class="label">通知总数</div></div>
-        <div class="stat"><div class="num" id="stCourses">-</div><div class="label">我的课程</div></div>
-        <div class="stat"><div class="num" id="stFiles">-</div><div class="label">课程文件</div></div>
+        <div class="stat">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm0 2.4V17h16V8.4l-8 5-8-5zM5.6 7l6.4 4 6.4-4H5.6z" fill="currentColor"/></svg></div>
+          <div class="num" id="stUnread">-</div><div class="label">未读消息</div>
+        </div>
+        <div class="stat">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-5-6.7V3.5a2 2 0 1 0-4 0v.8A7 7 0 0 0 5 11v5l-2 2v1h18v-1l-2-2zm-2 0H7v-5a5 5 0 0 1 10 0v5z" fill="currentColor"/></svg></div>
+          <div class="num" id="stNotices">-</div><div class="label">通知总数</div>
+        </div>
+        <div class="stat">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h5v18H6a2 2 0 0 1-2-2V5zm10-2h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4V3zM6 4.8c0-.1.1-.3.4-.3H10v15H6.4c-.3 0-.4-.2-.4-.3V4.8zM14 4.8c0-.1.1-.3.4-.3H17.6c.3 0 .4.2.4.3v14.4c0 .1-.1.3-.4.3H14.4c-.3 0-.4-.2-.4-.3V4.8z" fill="currentColor"/></svg></div>
+          <div class="num" id="stCourses">-</div><div class="label">我的课程</div>
+        </div>
+        <div class="stat">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5L13 3.5zM7 12h10v1.6H7V12zm0 3.4h10V17H7v-1.6z" fill="currentColor"/></svg></div>
+          <div class="num" id="stFiles">-</div><div class="label">课程文件</div>
+        </div>
       </div>
+
+      <div class="grid-2">
+        <div class="card brief-card">
+          <h3>学习简报
+            <span class="brief-tabs">
+              <button class="brief-tab active" data-scope="today">每日</button>
+              <button class="brief-tab" data-scope="week">每周</button>
+            </span>
+          </h3>
+          <div id="briefBox"><div class="empty">加载中…</div></div>
+        </div>
+        <div class="card">
+          <h3>最近同步</h3>
+          <div id="dashSync"><div class="empty">加载中…</div></div>
+        </div>
+      </div>
+
       <div class="grid-2">
         <div class="card">
           <h3>最近通知 <a class="more" href="#" data-goto="notices">全部 →</a></h3>
           <div id="dashNotices"><div class="empty">加载中…</div></div>
         </div>
         <div class="card">
-          <h3>最近同步</h3>
-          <div id="dashSync"><div class="empty">加载中…</div></div>
+          <h3>本周通知 <span class="more" id="weekCount"></span></h3>
+          <div id="dashWeek"><div class="empty">加载中…</div></div>
         </div>
       </div>
     </section>
@@ -68,7 +97,10 @@
       <div class="page-title">课程文件</div>
       <div class="page-sub">从超星课程章节中采集的课件 / 文档</div>
       <div class="toolbar">
-        <input type="text" id="fileSearch" placeholder="搜索文件名或课程名…" style="width:260px">
+        <div class="search-box">
+          <svg class="search-ico" viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.32l5.39 5.39 1.42-1.42-5.39-5.39A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z" fill="currentColor"/></svg>
+          <input type="text" id="fileSearch" placeholder="搜索文件名或课程名…">
+        </div>
         <div class="spacer"></div>
         <span class="page-sub" id="fileCount" style="margin:0"></span>
       </div>
@@ -92,6 +124,8 @@
           <span class="chip">我有哪些课程？</span>
           <span class="chip">有哪些课程文件？</span>
           <span class="chip">超星上有什么新消息？</span>
+          <span class="chip">今日简报</span>
+          <span class="chip">本周简报</span>
         </div>
         <div class="chat-input">
           <input type="text" id="chatInput" placeholder="输入你的问题，回车发送…">
@@ -104,15 +138,27 @@
     <!-- 设置 -->
     <section class="page" id="page-settings">
       <div class="page-title">设置</div>
-      <div class="page-sub">Cookie 获取方式：浏览器登录目标网站 → F12 → 网络(Network) → 刷新 → 点第一个请求 → 请求标头 → 复制 Cookie</div>
+      <div class="page-sub">获取 Cookie 最简单的方式：在下方超星卡片里输入账号密码点「自动获取」；或浏览器登录目标网站 → F12 → 网络(Network) → 刷新 → 点第一个请求 → 请求标头 → 复制 Cookie</div>
 
       <div class="card">
         <h3>超星学习通</h3>
+        <div class="form-row highlight">
+          <label>一键获取 Cookie<br><span class="hint">推荐，免手动</span></label>
+          <div class="auto-login">
+            <div class="hint">傻瓜式操作：直接输入你的超星账号密码，点「自动获取 Cookie」即可，系统会替你登录并保存（Cookie 只存本地）。</div>
+            <div class="login-line">
+              <input type="text" id="chxUser" placeholder="超星账号 / 手机号">
+              <input type="password" id="chxPwd" placeholder="超星密码">
+              <button class="btn" id="btnChxLogin">自动获取 Cookie</button>
+            </div>
+            <div class="hint" id="chxLoginTip">若自动登录失败（如需验证码），再用下面的手动方式。</div>
+          </div>
+        </div>
         <div class="form-row">
-          <label>Cookie</label>
+          <label>手动 Cookie<br><span class="hint">备用方式</span></label>
           <div>
             <input type="password" id="setChxCookie" placeholder="mooc1-1.chaoxing.com 的 Cookie">
-            <div class="hint">登录 mooc1-1.chaoxing.com 后复制，Cookie 过期后重新复制即可。</div>
+            <div class="hint">备用：浏览器登录 mooc1-1.chaoxing.com → F12 → 网络 → 复制 Cookie；Cookie 过期后重新获取即可。</div>
           </div>
         </div>
         <div class="form-row">
@@ -166,6 +212,7 @@
           <div class="switch">
             <label><input type="checkbox" id="setNtNotice"> 新通知</label>
             <label><input type="checkbox" id="setNtDigest"> 每日简报</label>
+            <label><input type="checkbox" id="setNtWeekly"> 每周简报</label>
           </div>
         </div>
         <div class="form-row">

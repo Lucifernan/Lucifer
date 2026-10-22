@@ -18,6 +18,12 @@ function esc(s) {
   }[c]));
 }
 
+/* 把纯文本里的 URL 变成可点链接（输入须已 esc） */
+function linkify(html) {
+  return html.replace(/https?:\/\/[^\s<>"']+/g,
+    (u) => `<a href="${u}" target="_blank" rel="noopener" class="chat-link">${u}</a>`);
+}
+
 let toastTimer;
 function toast(msg) {
   const t = $('#toast');
@@ -52,16 +58,36 @@ function noticeRow(n) {
     ? '<span class="tag cx">超星</span>'
     : '<span class="tag zhs">智慧树</span>';
   const kind = n.kind && n.kind !== 'notice' ? `<span class="tag hw">${esc(n.kind)}</span>` : '';
-  const link = n.url ? ` <a href="${esc(n.url)}" target="_blank" rel="noopener">原文</a>` : '';
-  return `<div class="list-item notice-item clickable" data-id="${n.id}">
+  const link = n.url
+    ? `<a class="link-btn" href="${esc(n.url)}" target="_blank" rel="noopener" title="查看原文">
+        <svg viewBox="0 0 24 24"><path d="M14 3h7v7h-2V6.4l-8.3 8.3-1.4-1.4L17.6 5H14V3zM5 5h5v2H6v11h11v-4h2v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="currentColor"/></svg>
+        查看原文</a>`
+    : '';
+  return `<div class="list-item notice-item clickable${n.is_read ? ' read' : ''}" data-id="${n.id}">
     ${n.is_read ? '' : '<div class="unread-dot"></div>'}
     <div class="body">
-      <div class="title">${src}${kind}${esc(n.title)}${link}</div>
+      <div class="title">${src}${kind}${esc(n.title)}</div>
       <div class="meta">${esc(n.published_at || n.fetched_at || '')}</div>
       <div class="notice-content">${esc(n.content || '')}</div>
+      ${link}
     </div>
   </div>`;
 }
+
+/* 简报：每日 / 每周 */
+let briefScope = 'today';
+async function loadBriefing() {
+  const box = $('#briefBox');
+  const b = await api(`/briefing?scope=${briefScope}`).catch(() => null);
+  if (!b) { box.innerHTML = '<div class="empty">简报生成失败</div>'; return; }
+  box.innerHTML = `<div class="brief-title">${esc(b.title)}</div>`
+    + (b.lines || []).map((l) => `<div class="brief-line">${linkify(esc(l))}</div>`).join('');
+}
+$$('.brief-tab').forEach((t) => t.addEventListener('click', () => {
+  briefScope = t.dataset.scope;
+  $$('.brief-tab').forEach((x) => x.classList.toggle('active', x === t));
+  loadBriefing();
+}));
 
 async function loadDashboard() {
   const d = await api('/overview').catch(() => null);
@@ -72,11 +98,18 @@ async function loadDashboard() {
   $('#stFiles').textContent = d.files_total;
   $('#badgeUnread').style.display = d.unread ? '' : 'none';
   $('#badgeUnread').textContent = d.unread;
-  $('#dashSub').textContent = `今日新增通知 ${d.new_week} 条 · 数据截至最近一次同步`;
+  $('#dashSub').textContent = `今日新增通知 ${d.new_today ?? 0} 条 · 本周新增 ${d.new_week ?? 0} 条 · 数据截至最近一次同步`;
 
   $('#dashNotices').innerHTML = d.latest_notices.length
     ? d.latest_notices.map(noticeRow).join('')
     : '<div class="empty">暂无通知</div>';
+
+  $('#weekCount').textContent = `本周 ${d.new_week ?? 0} 条`;
+  $('#dashWeek').innerHTML = (d.week_notices || []).length
+    ? d.week_notices.map(noticeRow).join('')
+    : '<div class="empty">本周暂无通知</div>';
+
+  loadBriefing();
 
   const logs = await api('/sync/log?limit=6').catch(() => []);
   $('#dashSync').innerHTML = logs.length
@@ -109,7 +142,7 @@ $('#btnReadAll').addEventListener('click', async () => {
 });
 document.addEventListener('click', async (e) => {
   const item = e.target.closest('.notice-item');
-  if (!item || e.target.tagName === 'A') return;
+  if (!item || e.target.closest('a')) return;
   item.classList.toggle('open');
   if (item.classList.contains('open') && !item.dataset.read) {
     item.dataset.read = '1';
@@ -153,7 +186,7 @@ function renderChat() {
   const box = $('#chatMsgs');
   const list = chatLog.length ? chatLog : [{ role: 'assistant', text: WELCOME }];
   box.innerHTML = list.map((m) =>
-    `<div class="msg ${m.role}"><div class="bubble">${esc(m.text)}</div></div>`).join('');
+    `<div class="msg ${m.role}"><div class="bubble">${linkify(esc(m.text))}</div></div>`).join('');
   box.scrollTop = box.scrollHeight;
 }
 
@@ -204,6 +237,7 @@ const FIELDS = {
   setZhsCookie: 'zhihuishu_cookie', setZhsMessageUrl: 'zhihuishu_message_url',
   setInterval: 'sync_interval_minutes', setDigest: 'daily_digest_time',
   setNtNotice: 'notify_new_notice', setNtDigest: 'notify_digest',
+  setNtWeekly: 'notify_weekly',
 };
 
 async function loadSettings() {
@@ -242,6 +276,28 @@ $$('[data-ping]').forEach((b) => b.addEventListener('click', async () => {
 $('#btnTestNotify').addEventListener('click', async () => {
   const d = await api('/test/notify', { method: 'POST', body: {} }).catch((e) => ({ ok: false }));
   toast(d.ok ? '测试提醒已发送' : '发送失败（通知组件不可用）');
+});
+
+/* 一键获取超星 Cookie：账号密码 → 系统自动登录保存 */
+$('#btnChxLogin').addEventListener('click', async () => {
+  const tip = $('#chxLoginTip');
+  const user = $('#chxUser').value.trim();
+  const pwd = $('#chxPwd').value;
+  if (!user || !pwd) { tip.textContent = '请先填写超星账号和密码'; return; }
+  const btn = $('#btnChxLogin');
+  btn.disabled = true;
+  tip.textContent = '正在登录超星并获取 Cookie，请稍候…';
+  const d = await api('/chaoxing/login', { method: 'POST', body: { username: user, password: pwd } })
+    .catch((e) => ({ ok: false, error: e.message }));
+  btn.disabled = false;
+  if (d.ok) {
+    tip.textContent = '获取成功！Cookie 已自动保存 ✓ 现在可以点「立即同步」了。';
+    $('#setChxCookie').value = d.cookie || '';
+    $('#chxPwd').value = '';
+    toast('超星 Cookie 获取成功');
+  } else {
+    tip.textContent = '自动登录失败：' + (d.error || '未知原因') + '。可改用下方手动方式复制 Cookie。';
+  }
 });
 
 /* ---------------- 同步 ---------------- */

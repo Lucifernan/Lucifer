@@ -2,9 +2,10 @@
 FROM python:3.11-slim
 
 # 不缓冲输出，方便看日志；容器内必须监听 0.0.0.0
+# PORT 必须与平台健康检查端口一致（腾讯云 CloudBase Run 探针检查 8000）
 ENV PYTHONUNBUFFERED=1 \
     HOST=0.0.0.0 \
-    PORT=80
+    PORT=8000
 
 WORKDIR /app
 

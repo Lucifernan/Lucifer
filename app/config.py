@@ -30,6 +30,7 @@ DEFAULTS = {
     "daily_digest_time": "08:00",
     "notify_new_notice": True,
     "notify_digest": True,
+    "notify_weekly": True,
     "debug": True,
 }
 
