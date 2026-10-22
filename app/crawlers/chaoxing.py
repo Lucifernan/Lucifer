@@ -11,7 +11,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 from .. import config
-from .base import abs_url, fetch, make_session, save_debug, strip_html
+from .base import abs_url, fetch, make_session, save_debug, strip_html, try_json
 
 # 导航/推广类干扰词
 JUNK = {
@@ -362,12 +362,46 @@ def _session_ok(s) -> bool:
     return r.status_code == 200 and "login" not in u and "passport" not in u and len(r.text) > 2000
 
 
+# 现行登录入口（旧 /fanya/login 已 404）与提交接口、前端加密参数
+_LOGIN_URL = "https://passport2.chaoxing.com/login"
+_FANYALOGIN_URL = "https://passport2.chaoxing.com/fanyalogin"
+_AES_KEY = b"u2oh6Vu^HWe4_AES"
+_LOGIN_FIELDS = (
+    "fid", "refer", "t", "forbidotherlogin", "validate",
+    "doubleFactorLogin", "independentId", "independentNameId",
+)
+
+
+def _aes_encrypt(text: str) -> str:
+    """与超星前端 login.js 一致：AES-128-CBC，密钥=IV，Pkcs7，输出 Base64。"""
+    import base64
+
+    from Crypto.Cipher import AES
+    from Crypto.Util.Padding import pad
+
+    cipher = AES.new(_AES_KEY, AES.MODE_CBC, _AES_KEY)
+    return base64.b64encode(cipher.encrypt(pad(text.encode("utf-8"), 16))).decode()
+
+
+def _login_error(msg: str) -> dict:
+    msg = (msg or "登录未成功").strip()[:200]
+    if re.search(r"验证码|校验码|图形", msg):
+        hint = "（可能触发图形验证码：先在浏览器网页登录一次再重试，或改用手动方式）"
+    elif re.search(r"密码|账号|用户名", msg):
+        hint = "（请核对账号密码）"
+    elif re.search(r"风险|异常|锁|频繁", msg):
+        hint = "（账号触发风控，请稍后再试）"
+    else:
+        hint = ""
+    return {"ok": False, "error": f"自动登录失败：{msg}{hint}"}
+
+
 def auto_login(username: str, password: str) -> dict:
     """账号密码自动登录超星并保存 Cookie（傻瓜式获取，无需手动 F12）。
 
-    流程：打开登录页 → 解析真实表单（action/隐藏字段/字段名，随超星改版自适应）
-    → 提交账号密码 → 用互动页校验登录态 → 保存 Cookie 并自动补全互动页 URL。
-    失败时返回可读原因（密码错误 / 需验证码 / 风控），引导手动获取兜底。
+    流程：GET /login 登录页取隐藏参数（fid/refer/t 等）→ 账号密码按
+    前端规则 AES 加密 → POST /fanyalogin（返回 JSON）→ 跟随返回跳转
+    完成各子域登录 → 互动页校验登录态 → 保存 Cookie 并刷新互动页 URL。
     """
     username = (username or "").strip()
     password = password or ""
@@ -375,75 +409,71 @@ def auto_login(username: str, password: str) -> dict:
         return {"ok": False, "error": "请填写超星账号和密码"}
     base = config.get("chaoxing_base").rstrip("/")
     s = make_session("")
+    # 登录态交给 Cookie jar；requests 下静态 Cookie 头会遮蔽 jar（实测空头也遮蔽）
+    s.headers.pop("Cookie", None)
 
-    # 1) 打开登录页
-    page_url = "https://passport2.chaoxing.com/fanya/login"
+    # 1) 打开登录页，解析隐藏参数
     try:
-        resp = fetch(s, page_url)
+        resp = fetch(s, _LOGIN_URL)
     except Exception as e:
         return {"ok": False, "error": f"登录页访问失败：{e}"}
     save_debug("chaoxing_login_page", resp.text)
+    if "passport404" in resp.url:
+        return {"ok": False, "error": "自动登录失败：登录入口已失效，请改用手动方式并反馈我更新"}
     soup = BeautifulSoup(resp.text, "lxml")
+    form = next(
+        (f for f in soup.find_all("form") if f.find("input", attrs={"type": "password"})),
+        None,
+    )
+    if form is None:
+        return {"ok": False, "error": "自动登录失败：登录页结构变化，请改用手动方式"}
+    fields = {
+        i.get("name"): (i.get("value") or "")
+        for i in form.find_all("input")
+        if i.get("name")
+    }
 
-    # 2) 解析表单：action + 全部隐藏字段 + 账号/密码字段名（自适应超星字段命名）
-    form = None
-    for f in soup.find_all("form"):
-        if f.find("input", attrs={"type": "password"}):
-            form = f
-            break
-    data, action = {}, page_url
-    pwd_field, user_field = "password", "username"
-    if form is not None:
-        action = abs_url(resp.url, form.get("action") or page_url)
-        for inp in form.find_all("input"):
-            name = inp.get("name")
-            if name:
-                data[name] = inp.get("value") or ""
-        pw = form.find("input", attrs={"type": "password"})
-        if pw and pw.get("name"):
-            pwd_field = pw.get("name")
-        uinp = None
-        for inp in form.find_all(
-            "input", attrs={"type": re.compile(r"(text|tel|email)", re.I)}
-        ):
-            n = (inp.get("name") or "").lower()
-            if any(k in n for k in ("user", "name", "uname", "phone", "account", "email")):
-                uinp = inp
-                break
-        if uinp and uinp.get("name"):
-            user_field = uinp.get("name")
+    # 2) 组装参数；t=true 时按前端规则加密账号与密码
+    data = {k: fields.get(k, "") for k in _LOGIN_FIELDS}
+    if fields.get("t") == "true":
+        data["uname"] = _aes_encrypt(username)
+        data["password"] = _aes_encrypt(password)
+    else:
+        data["uname"] = username
+        data["password"] = password
 
-    # 3) 填写账号密码；验证码字段清空（无验证码时留空即可通过）
-    data[user_field] = username
-    data[pwd_field] = password
-    for k in list(data):
-        if re.search(r"verify|captcha|rand|checkcode", k, re.I):
-            data[k] = ""
-    data.setdefault("remember", "true")
-    data.setdefault("keepLogin", "true")
-
-    # 4) 提交登录
+    # 3) 提交 JSON 登录接口
     try:
-        r = s.post(action, data=data, timeout=20, allow_redirects=True,
-                   headers={"Referer": resp.url})
+        r = s.post(
+            _FANYALOGIN_URL,
+            data=data,
+            timeout=20,
+            headers={
+                "Referer": resp.url,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+            },
+        )
     except Exception as e:
         return {"ok": False, "error": f"登录提交失败：{e}"}
-    save_debug("chaoxing_login_resp", r.text)
+    save_debug("chaoxing_fanyalogin", r.text)
+    j = try_json(r)
+    if not isinstance(j, dict):
+        return {"ok": False, "error": f"自动登录失败：接口返回异常(HTTP {r.status_code})，请改用手动方式"}
+    if not j.get("status"):
+        return _login_error(j.get("msg2") or j.get("msg") or j.get("message") or "")
+
+    # 4) 跟随登录跳转，完成各子域 cookie 落地
+    dest = urllib.parse.unquote(j.get("url") or "")
+    if dest.startswith("http"):
+        try:
+            fetch(s, dest)
+        except Exception:
+            pass
 
     # 5) 校验登录态（互动页可达且未跳登录）
     if not _session_ok(s):
-        page = (r.text or "")[:8000]
-        if re.search(r"验证码|图形码|verifyCode", page, re.I) and re.search(
-            r"错误|不正确|请输入|invalid", page, re.I
-        ):
-            hint = "登录需要图形验证码，请改用下方手动方式获取 Cookie"
-        elif re.search(r"密码[^\n]{0,10}错误|密码不正确|用户名或密码", page):
-            hint = "账号或密码错误，请检查后重试"
-        elif re.search(r"风险|异常|锁定|多次", page):
-            hint = "账号触发风控，请稍后再试或改用手动方式"
-        else:
-            hint = "登录未成功，可能改版或需验证码，请改用手动方式"
-        return {"ok": False, "error": f"自动登录失败：{hint}"}
+        return {"ok": False, "error": "自动登录失败：登录成功但会话校验未通过，请改用手动方式"}
 
     # 6) 保存 Cookie
     cookie = "; ".join(f"{k}={v}" for k, v in s.cookies.get_dict().items())

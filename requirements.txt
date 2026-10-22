@@ -3,6 +3,8 @@ uvicorn[standard]
 requests
 beautifulsoup4
 lxml
+# 超星一键登录的密码加密（与前端 login.js 的 AES-CBC 一致）
+pycryptodome
 apscheduler
 winotify; sys_platform == "win32"
 python-dotenv
