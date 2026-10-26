@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+# IDE 生成
+.trae-html-share-packages/

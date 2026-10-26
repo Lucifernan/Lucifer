@@ -234,7 +234,8 @@ $('#btnClearChat').addEventListener('click', async () => {
 const FIELDS = {
   setChxCookie: 'chaoxing_cookie', setChxInteraction: 'chaoxing_interaction',
   setChxFiles: 'chaoxing_fetch_files',
-  setZhsCookie: 'zhihuishu_cookie', setZhsMessageUrl: 'zhihuishu_message_url',
+  setZhsCookie: 'zhihuishu_cookie', setZhsCookieManual: 'zhihuishu_cookie',
+  setZhsMessageUrl: 'zhihuishu_message_url',
   setInterval: 'sync_interval_minutes', setDigest: 'daily_digest_time',
   setNtNotice: 'notify_new_notice', setNtDigest: 'notify_digest',
   setNtWeekly: 'notify_weekly',
@@ -300,25 +301,29 @@ $('#btnChxLogin').addEventListener('click', async () => {
   }
 });
 
-/* 一键获取智慧树 Cookie：账号密码 → 系统自动登录保存（CAS 登录） */
-$('#btnZhsLogin').addEventListener('click', async () => {
+/* 快速获取智慧树 Cookie：引导复制 / 粘贴 */
+$('#btnCopyZhsCode').addEventListener('click', async () => {
   const tip = $('#zhsLoginTip');
-  const user = $('#zhsUser').value.trim();
-  const pwd = $('#zhsPwd').value;
-  if (!user || !pwd) { tip.textContent = '请先填写智慧树账号和密码'; return; }
-  const btn = $('#btnZhsLogin');
-  btn.disabled = true;
-  tip.textContent = '正在登录智慧树并获取 Cookie，请稍候…';
-  const d = await api('/zhihuishu/login', { method: 'POST', body: { username: user, password: pwd } })
-    .catch((e) => ({ ok: false, error: e.message }));
-  btn.disabled = false;
-  if (d.ok) {
-    tip.textContent = '获取成功！Cookie 已自动保存 ✓ 现在可以点「立即同步」了。';
-    $('#setZhsCookie').value = d.cookie || '';
-    $('#zhsPwd').value = '';
-    toast('智慧树 Cookie 获取成功');
-  } else {
-    tip.textContent = '自动登录失败：' + (d.error || '未知原因') + '。可改用下方手动方式复制 Cookie。';
+  try {
+    await navigator.clipboard.writeText('copy(document.cookie)');
+    tip.textContent = '代码已复制 ✓ 回到智慧树页面：F12 → Console → 粘贴并回车，即可自动复制 Cookie。';
+    toast('代码已复制，去智慧树控制台执行');
+  } catch (e) {
+    tip.textContent = '自动复制失败，请手动选中代码复制，再到智慧树控制台粘贴执行。';
+  }
+});
+$('#btnPasteZhs').addEventListener('click', async () => {
+  const tip = $('#zhsLoginTip');
+  const input = $('#setZhsCookie');
+  try {
+    const t = await navigator.clipboard.readText();
+    if (!t) { tip.textContent = '剪贴板是空的，请先在智慧树控制台执行 copy(document.cookie)。'; return; }
+    input.value = t;
+    input.type = 'password';
+    tip.textContent = '已粘贴 ✓ 点页面底部「保存设置」生效，然后点「立即同步」。';
+    toast('Cookie 已粘贴，保存后即可同步');
+  } catch (e) {
+    tip.textContent = '读取剪贴板被浏览器拒绝（需授权）。请手动复制 Cookie 粘到下面的输入框。';
   }
 });
 

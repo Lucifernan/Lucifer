@@ -178,22 +178,31 @@
       <div class="card">
         <h3>智慧树（知到）</h3>
         <div class="form-row highlight">
-          <label>一键获取 Cookie<br><span class="hint">推荐，免手动</span></label>
+          <label>快速获取 Cookie<br><span class="hint">10 秒完成，免 F12</span></label>
           <div class="auto-login">
-            <div class="hint">傻瓜式操作：直接输入你的智慧树账号密码，点「自动获取 Cookie」即可，系统会替你登录并保存（Cookie 只存本地）。</div>
-            <div class="login-line">
-              <input type="text" id="zhsUser" placeholder="智慧树账号 / 手机号">
-              <input type="password" id="zhsPwd" placeholder="智慧树密码">
-              <button class="btn" id="btnZhsLogin">自动获取 Cookie</button>
+            <div class="hint">智慧树登录已强制滑块验证码（网易易盾），无法像超星那样代码自动登录。用下面两步快速复制：</div>
+            <div class="steps">
+              ① 浏览器打开并登录 <a href="https://www.zhihuishu.com" target="_blank" rel="noopener">www.zhihuishu.com</a><br>
+              ② 在已登录的智慧树页面上按 <b>F12</b> 打开开发者工具 → 切到 <b>Console</b>（控制台）<br>
+              ③ 点下方按钮复制代码，粘贴到控制台按回车（自动复制 Cookie）：
+              <div class="login-line">
+                <code id="zhsCopyCode" style="flex:1">copy(document.cookie)</code>
+                <button class="btn ghost" id="btnCopyZhsCode">复制代码</button>
+              </div>
+              ④ 回到本页，点「从剪贴板粘贴」按钮：
+              <div class="login-line">
+                <input type="password" id="setZhsCookie" placeholder="粘贴的 Cookie 会填到这里">
+                <button class="btn" id="btnPasteZhs">从剪贴板粘贴</button>
+              </div>
             </div>
-            <div class="hint" id="zhsLoginTip">若自动登录失败（如需验证码），再用下面的手动方式。</div>
+            <div class="hint" id="zhsLoginTip">粘贴后点页面底部「保存设置」即可生效。若自动粘贴失败，直接粘贴到上面的输入框。</div>
           </div>
         </div>
         <div class="form-row">
           <label>Cookie</label>
           <div>
-            <input type="password" id="setZhsCookie" placeholder="www.zhihuishu.com 的 Cookie">
-            <div class="hint">备用：登录 zhihuishu.com 后复制；失效后重新复制。</div>
+            <input type="password" id="setZhsCookieManual" placeholder="www.zhihuishu.com 的 Cookie">
+            <div class="hint">备用：也可直接在这里手动粘贴 Cookie（zhihuishu.com 域）。</div>
           </div>
         </div>
         <div class="form-row">
