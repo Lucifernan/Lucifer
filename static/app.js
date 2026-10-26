@@ -300,6 +300,28 @@ $('#btnChxLogin').addEventListener('click', async () => {
   }
 });
 
+/* 一键获取智慧树 Cookie：账号密码 → 系统自动登录保存（CAS 登录） */
+$('#btnZhsLogin').addEventListener('click', async () => {
+  const tip = $('#zhsLoginTip');
+  const user = $('#zhsUser').value.trim();
+  const pwd = $('#zhsPwd').value;
+  if (!user || !pwd) { tip.textContent = '请先填写智慧树账号和密码'; return; }
+  const btn = $('#btnZhsLogin');
+  btn.disabled = true;
+  tip.textContent = '正在登录智慧树并获取 Cookie，请稍候…';
+  const d = await api('/zhihuishu/login', { method: 'POST', body: { username: user, password: pwd } })
+    .catch((e) => ({ ok: false, error: e.message }));
+  btn.disabled = false;
+  if (d.ok) {
+    tip.textContent = '获取成功！Cookie 已自动保存 ✓ 现在可以点「立即同步」了。';
+    $('#setZhsCookie').value = d.cookie || '';
+    $('#zhsPwd').value = '';
+    toast('智慧树 Cookie 获取成功');
+  } else {
+    tip.textContent = '自动登录失败：' + (d.error || '未知原因') + '。可改用下方手动方式复制 Cookie。';
+  }
+});
+
 /* ---------------- 同步 ---------------- */
 function renderSyncState(st) {
   if (!st) return;

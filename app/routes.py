@@ -190,6 +190,20 @@ def chaoxing_login(payload: dict = Body(...)):
         return {"ok": False, "error": str(e)}
 
 
+# ------------------------------------------------------------------ 一键获取智慧树 Cookie
+@router.post("/zhihuishu/login")
+def zhihuishu_login(payload: dict = Body(...)):
+    """傻瓜式：输入智慧树账号密码 → 系统自动登录并保存 Cookie。"""
+    username = (payload.get("username") or "").strip()
+    password = payload.get("password") or ""
+    if not username or not password:
+        raise HTTPException(400, "请填写智慧树账号和密码")
+    try:
+        return zhs.auto_login(username, password)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 # ------------------------------------------------------------------ 问答
 @router.post("/chat")
 def do_chat(payload: dict = Body(...)):

@@ -98,10 +98,6 @@ nav { padding: 12px 10px; flex: 1; overflow-y: auto; }
   background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
   padding: 16px 18px; position: relative; overflow: hidden;
 }
-.stat::after {
-  content: ""; position: absolute; right: -18px; top: -18px;
-  width: 70px; height: 70px; border-radius: 50%; background: rgba(79, 99, 247, .08);
-}
 .stat .num { font-size: 30px; font-weight: 700; color: var(--primary); }
 .stat .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .stat .ico {

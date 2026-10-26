@@ -150,8 +150,10 @@ def fetch_notices():
     custom = str(config.get("zhihuishu_message_url") or "").strip()
     if custom:
         candidates.append(custom)
-    candidates += [base + p for p in MESSAGE_PATHS]
+    # 新版知到：登录后首页（www.zhihuishu.com）即个人信息/学习界面，优先抓取；
+    # 旧版消息中心入口已随改版陆续 404，仅作兜底。
     candidates.append(base)
+    candidates += [base + p for p in MESSAGE_PATHS]
 
     collected, last_err = [], ""
     for url in candidates:
@@ -200,3 +202,110 @@ def ping() -> dict:
         and len(resp.text) > 1000
     )
     return {"ok": ok, "url": resp.url, "status": resp.status_code, "len": len(resp.text)}
+
+
+# ------------------------------------------------- 账号密码一键获取 Cookie（CAS 登录）
+# 智慧树采用 Apereo CAS：GET /login?service=主站 拿 lt/execution，POST /login
+# 明文提交账号密码，成功后 302 带 ticket 跳回主站并写入登录态 Cookie CASLOGC。
+_LOGIN_URL = "https://passport.zhihuishu.com/login"
+_SERVICE_URL = "https://www.zhihuishu.com/"
+
+
+def _login_error(msg: str) -> dict:
+    msg = (msg or "登录未成功").strip()[:200]
+    if not re.search(r"风控|锁定|验证码|校验码|图形|密码|账号", msg):
+        msg = f"{msg}（请核对账号密码）"
+    return {"ok": False, "error": f"自动登录失败：{msg}"}
+
+
+def _session_ok(s) -> bool:
+    """CAS 单点判据：已登录时再次 GET /login 会 302 带 ticket 跳主站；未登录则 200 渲染表单。"""
+    try:
+        r = s.get(_LOGIN_URL, params={"service": _SERVICE_URL}, timeout=20, allow_redirects=False)
+    except Exception:
+        return False
+    if r.status_code in (301, 302):
+        return "zhihuishu.com" in (r.headers.get("Location") or "")
+    return False
+
+
+def auto_login(username: str, password: str) -> dict:
+    """账号密码自动登录智慧树（知到）并保存 Cookie（傻瓜式，免 F12）。
+
+    流程：GET /login?service=主站 取 lt/execution → POST /login 提交账号密码
+    → 成功 302 带 ticket 跳回主站 → 跟随完成登录态 Cookie 落地 → CAS 单点
+    校验 → 保存 Cookie。新版本科入口统一从 www.zhihuishu.com 首页开始抓取。
+    """
+    username = (username or "").strip()
+    password = password or ""
+    if not username or not password:
+        return {"ok": False, "error": "请填写智慧树账号和密码"}
+    s = make_session("")
+    # 登录态交给 Cookie jar；requests 下静态 Cookie 头会遮蔽 jar
+    s.headers.pop("Cookie", None)
+
+    # 1) 打开登录页，取 lt / execution
+    try:
+        resp = s.get(_LOGIN_URL, params={"service": _SERVICE_URL}, timeout=20)
+    except Exception as e:
+        return {"ok": False, "error": f"登录页访问失败：{e}"}
+    save_debug("zhihuishu_login_page", resp.text)
+    lt = re.search(r'name="lt" value="([^"]+)"', resp.text)
+    exec_ = re.search(r'name="execution" value="([^"]+)"', resp.text)
+    if not lt or not exec_:
+        return {"ok": False, "error": "自动登录失败：登录页结构变化，请改用手动方式"}
+
+    # 2) 提交账号密码（CAS 明文，无需加密）
+    try:
+        r = s.post(
+            _LOGIN_URL,
+            data={
+                "username": username,
+                "password": password,
+                "lt": lt.group(1),
+                "execution": exec_.group(1),
+                "_eventId": "submit",
+            },
+            timeout=20,
+            allow_redirects=False,
+            headers={"Referer": resp.url},
+        )
+    except Exception as e:
+        return {"ok": False, "error": f"登录提交失败：{e}"}
+    save_debug("zhihuishu_login_post", r.text[:200000])
+    if r.status_code not in (301, 302):
+        # 失败：200 重渲染登录页（错误/验证码由页面 JS 弹出）
+        txt = r.text
+        if re.search(r"5次登录失败|5分钟后|锁定|频繁", txt):
+            return _login_error("账号触发风控锁定，请 5 分钟后再试")
+        cap = re.search(r'id="lPwdError"[^>]*style="([^"]*)"', txt)
+        if cap and "none" not in cap.group(1).lower():
+            return _login_error("可能需要图形验证码：先在浏览器网页登录一次再重试，或改用手动方式")
+        return _login_error("账号或密码不正确")
+
+    # 3) 跟随跳转（带 ticket 回主站），完成 CASLOGC 等 Cookie 落地
+    loc = r.headers.get("Location") or ""
+    if loc.startswith("/"):
+        loc = "https://passport.zhihuishu.com" + loc
+    if loc.startswith("http"):
+        try:
+            fetch(s, loc)
+        except Exception:
+            pass
+
+    # 4) CAS 单点校验
+    if not _session_ok(s):
+        return {"ok": False, "error": "自动登录失败：登录成功但会话校验未通过，请改用手动方式"}
+
+    # 5) 保存 Cookie
+    cookie = "; ".join(f"{k}={v}" for k, v in s.cookies.get_dict().items())
+    if not cookie:
+        return {"ok": False, "error": "登录成功但未获得 Cookie，请手动获取"}
+    config.update({"zhihuishu_cookie": cookie, "zhihuishu_message_url": ""})
+
+    # 6) 用新 Cookie 复核连通性
+    try:
+        p = ping()
+    except Exception as e:
+        p = {"ok": False, "error": str(e)}
+    return {"ok": True, "cookie": cookie, "ping": p}

@@ -177,11 +177,23 @@
 
       <div class="card">
         <h3>智慧树（知到）</h3>
+        <div class="form-row highlight">
+          <label>一键获取 Cookie<br><span class="hint">推荐，免手动</span></label>
+          <div class="auto-login">
+            <div class="hint">傻瓜式操作：直接输入你的智慧树账号密码，点「自动获取 Cookie」即可，系统会替你登录并保存（Cookie 只存本地）。</div>
+            <div class="login-line">
+              <input type="text" id="zhsUser" placeholder="智慧树账号 / 手机号">
+              <input type="password" id="zhsPwd" placeholder="智慧树密码">
+              <button class="btn" id="btnZhsLogin">自动获取 Cookie</button>
+            </div>
+            <div class="hint" id="zhsLoginTip">若自动登录失败（如需验证码），再用下面的手动方式。</div>
+          </div>
+        </div>
         <div class="form-row">
           <label>Cookie</label>
           <div>
             <input type="password" id="setZhsCookie" placeholder="www.zhihuishu.com 的 Cookie">
-            <div class="hint">登录 zhihuishu.com 后复制；失效后重新复制。</div>
+            <div class="hint">备用：登录 zhihuishu.com 后复制；失效后重新复制。</div>
           </div>
         </div>
         <div class="form-row">
