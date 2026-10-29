@@ -137,8 +137,16 @@
 
     <!-- 设置 -->
     <section class="page" id="page-settings">
-      <div class="page-title">设置</div>
-      <div class="page-sub">获取 Cookie 最简单的方式：在下方超星卡片里输入账号密码点「自动获取」；或浏览器登录目标网站 → F12 → 网络(Network) → 刷新 → 点第一个请求 → 请求标头 → 复制 Cookie</div>
+      <div class="page-head">
+        <div>
+          <div class="page-title">设置</div>
+          <div class="page-sub">获取 Cookie 最简单的方式：在下方超星卡片里输入账号密码点「自动获取」；或浏览器登录目标网站 → F12 → 网络(Network) → 刷新 → 点第一个请求 → 请求标头 → 复制 Cookie</div>
+        </div>
+        <div class="head-actions">
+          <span class="hint" id="saveTip"></span>
+          <button class="btn" id="btnSave">保存设置</button>
+        </div>
+      </div>
 
       <div class="card">
         <h3>超星学习通</h3>
@@ -195,7 +203,7 @@
                 <button class="btn" id="btnPasteZhs">从剪贴板粘贴</button>
               </div>
             </div>
-            <div class="hint" id="zhsLoginTip">粘贴后点页面底部「保存设置」即可生效。若自动粘贴失败，直接粘贴到上面的输入框。</div>
+            <div class="hint" id="zhsLoginTip">粘贴后点页面右上角「保存设置」即可生效。若自动粘贴失败，直接粘贴到上面的输入框。</div>
           </div>
         </div>
         <div class="form-row">
@@ -241,15 +249,28 @@
           <div><button class="btn ghost" id="btnTestNotify">发送测试提醒</button></div>
         </div>
       </div>
-
-      <div class="toolbar">
-        <button class="btn" id="btnSave">保存设置</button>
-        <span class="hint" id="saveTip"></span>
-      </div>
     </section>
   </main>
 </div>
 <div id="toast"></div>
+
+<!-- 首次进入引导弹窗 -->
+<div class="modal-mask" id="guideMask" hidden>
+  <div class="modal">
+    <h4>先完成两步，才能收到学习提醒</h4>
+    <div class="steps">
+      ① 打开左侧「<b>设置</b>」，填入超星 / 智慧树的 Cookie（超星可直接输账号密码一键获取）<br>
+      ② 点「<b>立即同步</b>」，把课程、通知、文件抓取到本机<br>
+      之后就能在「通知动态」「问答助手」里看到内容了。
+    </div>
+    <label class="dont-show"><input type="checkbox" id="guideDontShow"> 不再提示</label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="guideLater">稍后再说</button>
+      <button class="btn" id="guideGo">去设置</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

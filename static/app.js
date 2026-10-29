@@ -320,7 +320,7 @@ $('#btnPasteZhs').addEventListener('click', async () => {
     if (!t) { tip.textContent = '剪贴板是空的，请先在智慧树控制台执行 copy(document.cookie)。'; return; }
     input.value = t;
     input.type = 'password';
-    tip.textContent = '已粘贴 ✓ 点页面底部「保存设置」生效，然后点「立即同步」。';
+    tip.textContent = '已粘贴 ✓ 点右上角「保存设置」生效，然后点「立即同步」。';
     toast('Cookie 已粘贴，保存后即可同步');
   } catch (e) {
     tip.textContent = '读取剪贴板被浏览器拒绝（需授权）。请手动复制 Cookie 粘到下面的输入框。';
@@ -362,6 +362,33 @@ async function doSync() {
 }
 $('#btnSync').addEventListener('click', doSync);
 
+/* ---------------- 首次进入引导 ---------------- */
+const GUIDE_KEY = 'xuexiaozhu_guide_dismissed';
+
+function closeGuide() {
+  const mask = $('#guideMask');
+  if ($('#guideDontShow').checked) localStorage.setItem(GUIDE_KEY, '1');
+  mask.classList.remove('show');
+  setTimeout(() => { mask.hidden = true; }, 220);
+}
+
+async function maybeShowGuide() {
+  if (localStorage.getItem(GUIDE_KEY) === '1') return;
+  const cfg = await api('/settings').catch(() => null);
+  // 已经配置过 Cookie 的老用户不再打扰
+  if (cfg && (cfg.chaoxing_cookie || cfg.zhihuishu_cookie)) return;
+  const mask = $('#guideMask');
+  mask.hidden = false;
+  requestAnimationFrame(() => mask.classList.add('show'));
+}
+
+$('#guideGo').addEventListener('click', () => { closeGuide(); goto('settings'); });
+$('#guideLater').addEventListener('click', closeGuide);
+$('#guideMask').addEventListener('click', (e) => {
+  if (e.target === $('#guideMask')) closeGuide();
+});
+
 /* ---------------- 启动 ---------------- */
 loadDashboard();
 loadSettings();
+maybeShowGuide();
