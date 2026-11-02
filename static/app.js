@@ -173,7 +173,8 @@ function fileRow(f, q) {
   return `<div class="file-row">
     <span class="f-badge">${esc(type)}</span>
     ${f.url
-    ? `<a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.title)}">${markText(f.title, q)}</a>`
+    ? `<a href="/api/files/${f.id}/download" target="_blank" rel="noopener"
+         title="点击下载：${esc(f.title)}">${markText(f.title, q)}</a>`
     : `<span class="f-name" title="${esc(f.title)}">${markText(f.title, q)}</span>`}
   </div>`;
 }

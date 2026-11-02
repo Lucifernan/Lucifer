@@ -1,7 +1,9 @@
 """Web API 路由。"""
 import threading
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, HTTPException
+from fastapi.responses import StreamingResponse
 
 from . import chat, config, db
 from .crawlers import chaoxing as cx
@@ -103,6 +105,41 @@ def files(q: str = "", limit: int = 2000):
             (f"%{q}%", f"%{q}%", limit),
         )
     return db.query("SELECT * FROM files ORDER BY id DESC LIMIT ?", (limit,))
+
+
+@router.get("/files/{fid}/download")
+def download_file(fid: int):
+    """资料下载代理：用后端已保存的 Cookie + Referer 取文件，避免浏览器直连 403。"""
+    row = db.one("SELECT * FROM files WHERE id = ?", (fid,))
+    if not row:
+        raise HTTPException(404, "文件不存在")
+    name = (row["title"] or f"file-{fid}").strip()
+    if "." not in name and row.get("file_type"):
+        name += "." + row["file_type"]
+    try:
+        _session, resp = cx.open_download(row.get("url", ""))
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"下载失败：{e}")
+
+    def stream():
+        try:
+            for chunk in resp.iter_content(64 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            resp.close()
+
+    headers = {
+        "Content-Disposition": (
+            f"attachment; filename=\"file-{fid}\"; filename*=UTF-8''{quote(name)}"
+        ),
+    }
+    length = resp.headers.get("content-length")
+    if length:
+        headers["Content-Length"] = length
+    return StreamingResponse(stream(), media_type="application/octet-stream", headers=headers)
 
 
 # ------------------------------------------------------------------ 同步

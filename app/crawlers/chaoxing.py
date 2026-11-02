@@ -340,6 +340,26 @@ def fetch_files(force: bool = False):
     return files
 
 
+def open_download(url: str):
+    """打开资料下载地址（流式），返回 (session, response)。
+
+    下载地址会 302 到 d0.cldisk.com，CDN 校验 Referer；不带 Referer 会 403，
+    所以这里统一补上资料页 Referer，再交给后端代理给浏览器。
+    """
+    if not url:
+        raise RuntimeError("文件没有下载地址")
+    s = _session()
+    resp = s.get(
+        url,
+        headers={"Referer": _MAT_URL},
+        stream=True,
+        timeout=60,
+        allow_redirects=True,
+    )
+    resp.raise_for_status()
+    return s, resp
+
+
 def ping() -> dict:
     """连通性测试。"""
     base = config.get("chaoxing_base").rstrip("/")
