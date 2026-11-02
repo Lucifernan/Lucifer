@@ -3,15 +3,22 @@
 说明：页面结构随版本变化，解析全部采用“多策略 + 宽松匹配”，
 原始响应会落到 data/debug/ 便于对照页面调整选择器。
 """
-import json
 import re
+import time
 import urllib.parse
-from datetime import datetime
 
 from bs4 import BeautifulSoup
 
 from .. import config
-from .base import abs_url, fetch, make_session, save_debug, strip_html, try_json
+from .base import (
+    abs_url,
+    fetch,
+    make_session,
+    save_debug,
+    save_debug_file,
+    strip_html,
+    try_json,
+)
 
 # 导航/推广类干扰词
 JUNK = {
@@ -70,6 +77,9 @@ def fetch_courses():
     for ctype in (1, 0):
         resp = fetch(s, f"{base}/visit/courselistdata?courseType={ctype}")
         save_debug(f"chaoxing_courselist_{ctype}", resp.text)
+        if ctype == 1:
+            # 固定文件名，方便直接在 data/debug 下查阅
+            save_debug_file("cx_studentcourse_first", resp.text)
         soup = BeautifulSoup(resp.text, "lxml")
         for li in soup.select("li.course"):
             cid = li.get("courseid") or li.get("courseId") or ""
@@ -94,6 +104,9 @@ def fetch_courses():
                     teacher = t
                     break
             u = abs_url(base, link.get("href", "")) if link else ""
+            # 资料页需要 cpi（课程卡片链接里带，如 ...&cpi=489744663&ismooc2=1）
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(u).query)
+            cpi = (q.get("cpi") or [""])[0]
             key = (name, cid)
             if key in seen:
                 continue
@@ -104,6 +117,7 @@ def fetch_courses():
                     "course_name": name,
                     "course_id": cid,
                     "clazz_id": clz,
+                    "cpi": cpi,
                     "url": u,
                     "teacher": teacher,
                 }
@@ -175,182 +189,154 @@ def fetch_interaction():
     return items
 
 
-# ---------------------------------------------------------------- 课程文件
-def _cards_attachments(html: str, base: str):
-    """页面里附件藏在 li[data] 的 JSON 中（章节卡片 / 资料页同一套结构）。"""
-    soup = BeautifulSoup(html, "lxml")
-    out = []
-
-    def walk(obj):
-        if isinstance(obj, dict):
-            oid = obj.get("objectid") or obj.get("objectId")
-            name = obj.get("name") or obj.get("filename") or obj.get("title") or ""
-            if oid and name:
-                url = obj.get("url") or obj.get("download") or obj.get("preview") or ""
-                prop = obj.get("property") if isinstance(obj.get("property"), dict) else {}
-                ftype = str(obj.get("type") or prop.get("type") or "")
-                out.append(
-                    {
-                        "title": str(name),
-                        "objectid": str(oid),
-                        "file_type": ftype,
-                        "url": url if str(url).startswith("http") else abs_url(base, str(url)),
-                    }
-                )
-            for v in obj.values():
-                walk(v)
-        elif isinstance(obj, list):
-            for v in obj:
-                walk(v)
-
-    for li in soup.find_all(attrs={"data": True}):
-        raw = li.get("data") or ""
-        if "objectid" not in raw and "objectId" not in raw:
-            continue
-        try:
-            walk(json.loads(raw))
-        except Exception:
-            for m in re.finditer(r'"objectid"\s*:\s*"?(\w+)', raw):
-                out.append(
-                    {
-                        "title": li.get_text(" ", strip=True)[:80] or f"附件 {m.group(1)}",
-                        "objectid": m.group(1),
-                        "file_type": "",
-                        "url": "",
-                    }
-                )
-            break
-    # 兜底：整页正则
-    if not out:
-        for m in re.finditer(r'"objectid"\s*:\s*"?(\w+)"?[^}]{0,400}?"name"\s*:\s*"([^"]{1,120})"', html):
-            out.append(
-                {
-                    "title": m.group(2),
-                    "objectid": m.group(1),
-                    "file_type": "",
-                    "url": "",
-                }
-            )
-    res, seen = [], set()
-    for f in out:
-        if f["objectid"] in seen:
-            continue
-        seen.add(f["objectid"])
-        if not f["url"]:
-            f["url"] = f"{base}/visit/uobject?objectid={f['objectid']}"
-        res.append(f)
-    return res
+# ---------------------------------------------------------------- 课程资料
+# 「资料」页（mooc2 课程才有）：服务端渲染 HTML，文件夹/文件都是一行 ul.dataBody_td
+_MAT_URL = "https://mooc2-ans.chaoxing.com/mooc2-ans/coursedata/stu-datalist"
+_DOWNLOAD_URL = "https://mooc1.chaoxing.com/coursedata/downloadData"
+_PLACEHOLDER_TYPES = {"tch-courseware", ""}  # “返回上一级”等占位行
+_MAX_FOLDER_DEPTH = 3
 
 
-# ---------------------------------------------------------------- 课程文件
-FILE_EXT = re.compile(
-    r"\.(pdf|docx?|pptx?|xlsx?|txt|rtf|csv|zip|rar|7z|mp4|mp3|avi|wmv|mov|"
-    r"jpg|jpeg|png|gif|ppt|doc|xls)$",
-    re.I,
-)
+def _mat_rows(html: str):
+    """解析资料页每一行 -> {name, type, data_id, objectid, folder}。
 
-
-def _material_entry_urls(soup, base):
-    """在课程页导航里找「资料」入口链接（文字含“资料”）。"""
-    urls, seen = [], set()
-    for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
-        if not href or href.startswith(("javascript", "#", "mailto")):
-            continue
-        text = (a.get_text(" ", strip=True) or a.get("title") or "").strip()
-        if "资料" not in text:
-            continue
-        u = abs_url(base, href)
-        if u and u not in seen:
-            seen.add(u)
-            urls.append(u)
-    return urls
-
-
-def _material_files(html: str, base: str):
-    """从「资料」页提取文件：
-    1) 页面内 li[data] JSON 里的 objectid（与章节卡片同一套结构）
-    2) 直接可下载的链接（带文件扩展名，或 download/uobject 类地址）
+    行结构：<ul class="dataBody_td" type="afolder|pdf|doc|mp4|..."
+              id="dataId" dataname="名称" objectid="...">
     """
-    out = list(_cards_attachments(html, base))
+    rows, seen = [], set()
     soup = BeautifulSoup(html, "lxml")
-    seen = {f["objectid"] for f in out if f.get("objectid")}
-    for a in soup.find_all("a", href=True):
-        href = a["href"].strip()
-        if not href or href.startswith(("javascript", "#", "mailto")):
+    for ul in soup.select("ul.dataBody_td"):
+        name = (ul.get("dataname") or "").strip()
+        rtype = (ul.get("type") or "").strip()
+        data_id = (ul.get("id") or "").strip()
+        if not name or rtype in _PLACEHOLDER_TYPES or data_id in seen:
             continue
-        title = (a.get("title") or a.get_text(" ", strip=True) or "").strip()
-        if not title or len(title) > 120 or _is_junk(title):
-            continue
-        m = FILE_EXT.search(title)
-        if not m and not re.search(r"download|uobject|objectid", href, re.I):
-            continue
-        u = abs_url(base, href)
-        if u in seen:
-            continue
-        seen.add(u)
-        out.append(
+        seen.add(data_id)
+        rows.append(
             {
-                "title": title,
-                "objectid": "",
-                "file_type": m.group(1).lower() if m else "",
-                "url": u,
+                "name": name,
+                "type": rtype,
+                "data_id": data_id,
+                "objectid": (ul.get("objectid") or "").strip(),
+                "folder": rtype == "afolder",
             }
         )
-    return out
+    return rows
 
 
-_files_last_run = 0.0
+def _mat_meta(html: str):
+    """取资料页隐藏域：enc、totalPages（总页数）、datalistSize（总条数）。"""
+
+    def val(hid):
+        m = re.search(r'id="%s"[^>]*value="([^"]*)"' % hid, html)
+        return m.group(1) if m else ""
+
+    def num(hid):
+        try:
+            return int(val(hid) or 0)
+        except ValueError:
+            return 0
+
+    return {"enc": val("enc"), "pages": max(1, num("totalPages")), "size": num("datalistSize")}
+
+
+def _mat_page(s, cid, clz, cpi, data_id="", page=1, enc="", parent=""):
+    """资料页请求。
+
+    分页参数是 pages（不是 page）；文件夹用 dataId + parent（祖先 id 链）。
+    """
+    params = {
+        "courseid": cid,
+        "clazzid": clz,
+        "cpi": cpi,
+        "ut": "s",
+        "t": str(int(time.time() * 1000)),
+        "pages": str(page),
+        "type": "1",
+        "dataId": data_id or "0",
+        "order": "0",
+    }
+    if enc:
+        params["enc"] = enc
+    if parent:
+        params["parent"] = parent
+    return fetch(s, _MAT_URL, params=params)
+
+
+def _collect_files(s, cid, clz, cpi, data_id, depth, ancestors, visited, out, course_name,
+                   save_first=False):
+    """递归抓文件夹里的文件（深度 <= _MAX_FOLDER_DEPTH），并翻完每一页。"""
+    if depth > _MAX_FOLDER_DEPTH or (data_id and data_id in visited):
+        return
+    if data_id:
+        visited.add(data_id)
+    try:
+        first = _mat_page(s, cid, clz, cpi, data_id, 1, "", ",".join(ancestors))
+    except Exception:
+        return
+    if first.status_code != 200:
+        return
+    meta = _mat_meta(first.text)
+    total = meta["pages"]
+    for page in range(1, total + 1):
+        if page == 1:
+            html = first.text
+        else:
+            try:
+                resp = _mat_page(s, cid, clz, cpi, data_id, page, meta["enc"],
+                                 ",".join(ancestors))
+            except Exception:
+                break
+            if resp.status_code != 200:
+                break
+            html = resp.text
+        if save_first and depth == 0 and page == 1:
+            save_debug_file("cx_material_first", html)
+        for row in _mat_rows(html):
+            if row["folder"]:
+                _collect_files(
+                    s, cid, clz, cpi, row["data_id"], depth + 1,
+                    (ancestors + [data_id]) if data_id else [], visited, out, course_name,
+                )
+                continue
+            out.append(
+                {
+                    "title": row["name"],
+                    "file_type": row["type"],
+                    "objectid": row["objectid"],
+                    "course_name": course_name,
+                    "url": (
+                        f"{_DOWNLOAD_URL}?dataId={row['data_id']}&classId={clz}"
+                        f"&cpi={cpi}&courseId={cid}&ut=s"
+                    ),
+                }
+            )
 
 
 def fetch_files(force: bool = False):
-    """课程 -> 资料：抓取课程「资料」页里的共享资料（较重，由 sync 控制频率）。
+    """课程 -> 资料：抓取课程「资料」页里的资料。
 
-    数据来源：课程导航「资料」页，教师推送的课件/文档与同学共享的资料都在这里
-    （不是学生个人云盘，也不是章节卡片附件）。
-    课程入口用 /visit/courselistdata（老入口 /visit/stu-learn 已 404）。
+    数据来源：课程「资料」页（教师推送的课件 + 同学共享的资料），
+    文件夹递归展开、多页翻完。不是学生个人云盘，也不是章节卡片附件。
+    cpi 取自课程卡片链接（/visit/courselistdata），缺 cpi 的课直接跳过。
     """
-    import time
-
-    global _files_last_run
-    if not force and time.time() - _files_last_run < 6 * 3600:
-        return []
-    base = config.get("chaoxing_base").rstrip("/")
     s = _session()
     files = []
-    courses = fetch_courses()
-    for idx, c in enumerate(courses):
+    first_done = False
+    for c in fetch_courses():
         cid = c.get("course_id", "")
         clz = c.get("clazz_id", "")
-        cname = c.get("course_name", "")
-        if not cid:
+        cpi = c.get("cpi", "")
+        if not cid or not cpi:
             continue
-        try:
-            page = fetch(
-                s,
-                f"{base}/mycourse/studentcourse",
-                params={"courseid": cid, "clazzid": clz, "ut": "s"},
-            )
-            if idx == 0:
-                save_debug("cx_studentcourse_first", page.text)
-            entries = _material_entry_urls(BeautifulSoup(page.text, "lxml"), base)
-            if not entries:
-                continue
-            for url in entries[:2]:
-                try:
-                    mpage = page if url == page.url else fetch(s, url)
-                    if idx == 0:
-                        save_debug("cx_material_first", mpage.text)
-                    for f in _material_files(mpage.text, base):
-                        f["course_name"] = cname or cid
-                        files.append(f)
-                except Exception:
-                    continue
-        except Exception:
-            continue
-    # 抓到文件才记时间，抓空则下次同步继续尝试
-    if files:
-        _files_last_run = time.time()
+        out = []
+        _collect_files(
+            s, cid, clz, cpi, "", 0, [], set(), out,
+            c.get("course_name") or cid, save_first=(not first_done),
+        )
+        if out:
+            first_done = True
+        files.extend(out)
     return files
 
 

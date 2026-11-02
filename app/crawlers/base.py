@@ -48,6 +48,20 @@ def save_debug(name: str, text: str):
         pass
 
 
+def save_debug_file(name: str, text: str, ext: str = "html"):
+    """写固定文件名的调试文件（data/debug/<name>.<ext>），便于用户直接查阅。"""
+    if not config.get("debug"):
+        return
+    from ..config import DEBUG_DIR
+
+    safe = re.sub(r"[^\w\-.]+", "_", name)[:80]
+    path = DEBUG_DIR / f"{safe}.{ext}"
+    try:
+        path.write_text(text[:400000], encoding="utf-8", errors="ignore")
+    except Exception:
+        pass
+
+
 def pick(d: dict, *keys, default=""):
     """按候选键名取值，兼容不同版本字段。"""
     for k in keys:

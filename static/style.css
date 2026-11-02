@@ -133,6 +133,42 @@ nav { padding: 12px 10px; flex: 1; overflow-y: auto; }
 .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-top: 7px; flex-shrink: 0; }
 .empty { color: var(--muted); text-align: center; padding: 26px 0; font-size: 13px; }
 
+/* 课程文件：一个课程一张卡片 */
+.file-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; align-items: start; }
+.file-groups > .empty { grid-column: 1 / -1; }
+.file-card {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  border: 1px solid transparent; overflow: hidden;
+}
+.file-card.open { border-color: #dfe4ff; }
+.file-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; cursor: pointer; user-select: none;
+}
+.file-head:hover { background: #fafbff; }
+.file-head .chev { color: var(--muted); font-size: 12px; transition: transform .18s; flex-shrink: 0; }
+.file-card.open .file-head .chev { transform: rotate(90deg); }
+.file-head .course-name {
+  flex: 1; min-width: 0; font-weight: 600; font-size: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-head .file-count { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.file-list { display: none; border-top: 1px solid var(--line); max-height: 300px; overflow-y: auto; }
+.file-card.open .file-list { display: block; }
+.file-row { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px dashed var(--line); }
+.file-row:last-child { border-bottom: 0; }
+.f-badge {
+  flex-shrink: 0; min-width: 36px; text-align: center; font-size: 10px; line-height: 17px;
+  padding: 0 5px; border-radius: 6px; background: #eef0ff; color: var(--primary);
+  text-transform: uppercase;
+}
+.file-row a, .file-row .f-name {
+  flex: 1; min-width: 0; font-size: 13px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-row a:hover { color: var(--primary); text-decoration: underline; }
+mark { background: #fff1b8; color: inherit; padding: 0 1px; border-radius: 2px; }
+
 /* 课表格子 */
 .timetable { display: grid; grid-template-columns: 64px repeat(7, 1fr); gap: 6px; min-width: 860px; }
 .tt-head { text-align: center; font-weight: 600; padding: 8px 0; color: var(--text); background: #eef0ff; border-radius: 6px; }

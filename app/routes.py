@@ -95,7 +95,7 @@ def courses():
 
 
 @router.get("/files")
-def files(q: str = "", limit: int = 500):
+def files(q: str = "", limit: int = 2000):
     if q:
         return db.query(
             "SELECT * FROM files WHERE title LIKE ? OR course_name LIKE ? "

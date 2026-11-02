@@ -157,23 +157,83 @@ document.addEventListener('click', async (e) => {
 });
 
 /* ---------------- 文件 ---------------- */
+/* 一个课程一个小卡片：按课程分组，搜索时本地过滤并自动展开对应课程 */
+const openCourses = new Set();
+let allFiles = null;
+
+function markText(text, q) {
+  const html = esc(text);
+  if (!q) return html;
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+  return html.replace(re, (m) => `<mark>${m}</mark>`);
+}
+
+function fileRow(f, q) {
+  const type = (f.file_type || 'file').toUpperCase();
+  return `<div class="file-row">
+    <span class="f-badge">${esc(type)}</span>
+    ${f.url
+    ? `<a href="${esc(f.url)}" target="_blank" rel="noopener" title="${esc(f.title)}">${markText(f.title, q)}</a>`
+    : `<span class="f-name" title="${esc(f.title)}">${markText(f.title, q)}</span>`}
+  </div>`;
+}
+
+function renderFileGroups(files, q) {
+  const groups = new Map();
+  files.forEach((f) => {
+    const name = f.course_name || '未分类';
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(f);
+  });
+  if (!groups.size) {
+    $('#fileGroups').innerHTML = '<div class="empty">没有找到匹配的文件</div>';
+    return;
+  }
+  const cards = [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'zh'))
+    .map(([name, list]) => {
+      const open = q ? true : openCourses.has(name);
+      return `<div class="file-card${open ? ' open' : ''}" data-course="${esc(name)}">
+        <div class="file-head" role="button" tabindex="0">
+          <span class="chev">▸</span>
+          <span class="course-name" title="${esc(name)}">${markText(name, q)}</span>
+          <span class="file-count">${list.length} 个文件</span>
+        </div>
+        <div class="file-list">${list.map((f) => fileRow(f, q)).join('')}</div>
+      </div>`;
+    })
+    .join('');
+  $('#fileGroups').innerHTML = cards;
+}
+
 async function loadFiles() {
   const q = $('#fileSearch').value.trim();
-  const rows = await api(`/files?q=${encodeURIComponent(q)}`).catch(() => []);
-  $('#fileCount').textContent = `共 ${rows.length} 个文件`;
-  $('#fileTable tbody').innerHTML = rows.length
-    ? rows.map((f) => `<tr>
-        <td>${esc(f.course_name || '-')}</td>
-        <td>${esc(f.title)}</td>
-        <td>${esc(f.file_type || '-')}</td>
-        <td>${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">打开</a>` : '-'}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+  if (!allFiles) allFiles = await api('/files?limit=2000').catch(() => []);
+  const kw = q.toLowerCase();
+  const files = kw
+    ? allFiles.filter((f) => (f.title || '').toLowerCase().includes(kw)
+      || (f.course_name || '').toLowerCase().includes(kw))
+    : allFiles;
+  const courseCount = new Set(files.map((f) => f.course_name || '未分类')).size;
+  $('#fileCount').textContent = kw
+    ? `匹配 ${courseCount} 门课程 · ${files.length} 个文件`
+    : `共 ${courseCount} 门课程 · ${files.length} 个文件`;
+  renderFileGroups(files, q);
 }
+
+$('#fileGroups').addEventListener('click', (e) => {
+  const head = e.target.closest('.file-head');
+  if (!head) return;
+  const card = head.parentElement;
+  const name = card.dataset.course;
+  const willOpen = !card.classList.contains('open');
+  card.classList.toggle('open', willOpen);
+  if (willOpen) openCourses.add(name); else openCourses.delete(name);
+});
 let fileTimer;
 $('#fileSearch').addEventListener('input', () => {
   clearTimeout(fileTimer);
-  fileTimer = setTimeout(loadFiles, 300);
+  fileTimer = setTimeout(loadFiles, 200);
 });
 
 /* ---------------- 聊天 ---------------- */
@@ -356,6 +416,7 @@ async function doSync() {
       clearInterval(timer);
       btn.disabled = false;
       toast('同步完成');
+      allFiles = null; // 同步后清缓存，下次进入文件页拉取最新数据
       (renderers[current] || (() => {}))();
     }
   }, 2000);
