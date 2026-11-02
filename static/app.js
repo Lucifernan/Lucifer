@@ -434,11 +434,9 @@ function closeGuide() {
   setTimeout(() => { mask.hidden = true; }, 220);
 }
 
-async function maybeShowGuide() {
+function maybeShowGuide() {
+  // 只以「不再提示」为准：没勾选就每次进入都提示，勾选后才永久隐藏
   if (localStorage.getItem(GUIDE_KEY) === '1') return;
-  const cfg = await api('/settings').catch(() => null);
-  // 已经配置过 Cookie 的老用户不再打扰
-  if (cfg && (cfg.chaoxing_cookie || cfg.zhihuishu_cookie)) return;
   const mask = $('#guideMask');
   mask.hidden = false;
   requestAnimationFrame(() => mask.classList.add('show'));
