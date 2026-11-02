@@ -53,7 +53,9 @@ def run_sync(with_files: bool = True) -> dict:
                         "content": it.get("content", ""),
                         "url": it.get("url", ""),
                         "published_at": it.get("published_at", ""),
-                        "dedupe_key": f"cx::{it['title']}::{it.get('url', '')}",
+                        "dedupe_key": it.get("dedupe_key")
+                        or f"cx::{it['title']}::{it.get('url', '')}",
+                        "is_read": it.get("is_read", 0),
                         "fetched_at": db.now(),
                     },
                 ):

@@ -84,6 +84,18 @@ def init_db():
         conn.execute("DELETE FROM notices WHERE source = 'jwglxt'")
     except Exception:
         pass
+    # 旧版超星通知是从登录页/导航页硬抓的垃圾条目，清掉；之后只从「收件箱」采集
+    try:
+        conn.execute(
+            "DELETE FROM notices WHERE source = 'chaoxing' AND ("
+            "url LIKE 'javaScript%' OR url LIKE '%login%' OR url LIKE '%passport%' "
+            "OR title IN ('添加课程','已删除课程','已结束课程','已退课课程','更新公告',"
+            "'使用帮助','在线客服','忘记密码？','新用户注册','验证码登录','其他登录方式',"
+            "'《隐私政策》','《用户协议》') "
+            "OR title LIKE '更新公告%' OR title LIKE '京公网安备%')"
+        )
+    except Exception:
+        pass
     conn.commit()
 
 

@@ -126,66 +126,96 @@ def fetch_courses():
 
 
 # ---------------------------------------------------- 课程互动（通知/作业/考试）
+_INBOX_HOME = "https://i.chaoxing.com/base"
+_NOTICE_API = "https://notice.chaoxing.com/pc/notice/getNoticeList"
+_NOTICE_DETAIL = "https://notice.chaoxing.com/pc/notice/richtextNotice"
+_MAX_NOTICE_PAGES = 3  # 最多翻 3 页（60 条）
+
+
+def _inbox_referer(s) -> str:
+    """收件箱地址（带 s 令牌）：从个人空间菜单里取，取不到就用配置兜底。"""
+    try:
+        resp = fetch(s, _INBOX_HOME)
+        m = re.search(r"pc/notice/myNotice\?s=([\w]+)", resp.text)
+        if m:
+            return f"https://notice.chaoxing.com/pc/notice/myNotice?s={m.group(1)}"
+    except Exception:
+        pass
+    q = urllib.parse.parse_qs(
+        urllib.parse.urlparse(config.get("chaoxing_interaction") or "").query
+    )
+    token = (q.get("s") or [""])[0]
+    base = "https://notice.chaoxing.com/pc/notice/myNotice"
+    return f"{base}?s={token}" if token else base
+
+
 def fetch_interaction():
-    base = config.get("chaoxing_base").rstrip("/")
-    url = config.get("chaoxing_interaction") or f"{base}/visit/interaction"
+    """收件箱（notices.chaoxing.com）：POST /pc/notice/getNoticeList 取收到的通知。
+
+    收件箱在个人空间左侧菜单「收件箱」，页面本身是 JS 模板渲染，
+    数据由 getNoticeList 接口按 lastValue 游标分页返回。
+    """
     s = _session()
-    resp = fetch(s, url)
-    save_debug("chaoxing_interaction", resp.text)
-    soup = BeautifulSoup(resp.text, "lxml")
-    items, seen = [], set()
+    referer = _inbox_referer(s)
+    items, seen, last = [], set(), ""
 
-    def add(title, href, context=""):
-        title = re.sub(r"\s+", " ", title).strip()
-        if not title or _is_junk(title):
-            return
-        full = f"{title} {context}"
-        kind = _classify(full)
-        m = re.search(r"(20\d\d[-/]\d{1,2}[-/]\d{1,2})", context)
-        pub = m.group(1).replace("/", "-") if m else ""
-        u = abs_url(base, href or "")
-        key = f"cx::{title}::{u}"
-        if key in seen:
-            return
-        seen.add(key)
-        items.append(
-            {
-                "source": "chaoxing",
-                "kind": kind,
-                "title": title,
-                "url": u,
-                "published_at": pub,
-                "content": strip_html(context)[:500],
-            }
+    for _ in range(_MAX_NOTICE_PAGES):
+        data = {
+            "type": "",
+            "notice_type": "",
+            "lastValue": last,
+            "sort": "",
+            "folderUUID": "",
+            "kw": "",
+            "startTime": "",
+            "endTime": "",
+            "gKw": "",
+            "gName": "",
+            "year": "",
+            "tag": "",
+        }
+        resp = s.post(
+            _NOTICE_API,
+            data=data,
+            headers={"Referer": referer, "X-Requested-With": "XMLHttpRequest"},
+            timeout=30,
         )
-
-    # 策略1：表格行
-    for tr in soup.find_all("tr"):
-        cells = tr.find_all(["td", "th"])
-        if len(cells) < 2:
-            continue
-        row_text = tr.get_text(" ", strip=True)
-        for a in tr.find_all("a", href=True):
-            add(a.get_text(strip=True), a["href"], row_text)
-
-    # 策略2：通用链接
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if href.startswith(("javascript", "#", "mailto")):
-            continue
-        text = a.get_text(" ", strip=True)
-        ctx = ""
-        parent = a.find_parent(["li", "div", "dd"])
-        if parent:
-            ctx = parent.get_text(" ", strip=True)[:300]
-        add(text, href, ctx)
-
-    # 策略3：卡片/列表块里的标题文本（没有链接的通知）
-    for box in soup.select(".notice, .notify, .dynamic, [class*='notice'], [class*='msg']"):
-        text = box.get_text(" ", strip=True)
-        if 6 <= len(text) <= 120:
-            add(text, "", text)
-
+        save_debug("cx_inbox_list", resp.text)
+        if resp.status_code != 200:
+            break
+        try:
+            box = (resp.json() or {}).get("notices") or {}
+        except Exception:
+            break
+        rows = box.get("list") or []
+        for it in rows:
+            title = re.sub(r"\s+", " ", it.get("title") or "").strip()
+            code = (it.get("idCode") or "").strip()
+            if not title or not code or code in seen:
+                continue
+            seen.add(code)
+            content = strip_html(it.get("rtf_content") or it.get("content") or "")
+            items.append(
+                {
+                    "source": "chaoxing",
+                    "kind": _classify(f"{title} {content[:120]}"),
+                    "title": title,
+                    "url": (
+                        f"{_NOTICE_DETAIL}?sourceType={it.get('sourceType', '')}"
+                        f"&isRtf={it.get('isRtf', '')}&noticeId={code}"
+                    ),
+                    "published_at": (it.get("sendTime") or "").strip(),
+                    "content": content[:500],
+                    "dedupe_key": f"cx::notice::{code}",
+                    "is_read": 1 if str(it.get("isread", 0)) == "1" else 0,
+                }
+            )
+        if box.get("lastPage") in (1, "1"):
+            break
+        nxt = (box.get("lastGetId") or "").strip()
+        if not nxt or nxt == last:
+            break
+        last = nxt
     return items
 
 
