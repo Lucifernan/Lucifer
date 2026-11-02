@@ -176,26 +176,8 @@ def fetch_interaction():
 
 
 # ---------------------------------------------------------------- 课程文件
-def _chapters_of(soup):
-    """从课程页提取章节 knowledgeId。"""
-    kids, seen = [], set()
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        if not re.search(r"knowledge|chapter", href, re.I):
-            continue
-        q = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
-        kid = (q.get("knowledgeId") or q.get("knowledgeid") or q.get("chapterId") or [""])[0]
-        if not kid:
-            m = re.search(r"(?:chapterId|knowledgeId)=(\d+)", href, re.I)
-            kid = m.group(1) if m else ""
-        if kid and kid not in seen:
-            seen.add(kid)
-            kids.append(kid)
-    return kids
-
-
 def _cards_attachments(html: str, base: str):
-    """knowledge/cards 页面里附件藏在 li[data] 的 JSON 中。"""
+    """页面里附件藏在 li[data] 的 JSON 中（章节卡片 / 资料页同一套结构）。"""
     soup = BeautifulSoup(html, "lxml")
     out = []
 
@@ -260,14 +242,72 @@ def _cards_attachments(html: str, base: str):
     return res
 
 
+# ---------------------------------------------------------------- 课程文件
+FILE_EXT = re.compile(
+    r"\.(pdf|docx?|pptx?|xlsx?|txt|rtf|csv|zip|rar|7z|mp4|mp3|avi|wmv|mov|"
+    r"jpg|jpeg|png|gif|ppt|doc|xls)$",
+    re.I,
+)
+
+
+def _material_entry_urls(soup, base):
+    """在课程页导航里找「资料」入口链接（文字含“资料”）。"""
+    urls, seen = [], set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href or href.startswith(("javascript", "#", "mailto")):
+            continue
+        text = (a.get_text(" ", strip=True) or a.get("title") or "").strip()
+        if "资料" not in text:
+            continue
+        u = abs_url(base, href)
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    return urls
+
+
+def _material_files(html: str, base: str):
+    """从「资料」页提取文件：
+    1) 页面内 li[data] JSON 里的 objectid（与章节卡片同一套结构）
+    2) 直接可下载的链接（带文件扩展名，或 download/uobject 类地址）
+    """
+    out = list(_cards_attachments(html, base))
+    soup = BeautifulSoup(html, "lxml")
+    seen = {f["objectid"] for f in out if f.get("objectid")}
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href or href.startswith(("javascript", "#", "mailto")):
+            continue
+        title = (a.get("title") or a.get_text(" ", strip=True) or "").strip()
+        if not title or len(title) > 120 or _is_junk(title):
+            continue
+        m = FILE_EXT.search(title)
+        if not m and not re.search(r"download|uobject|objectid", href, re.I):
+            continue
+        u = abs_url(base, href)
+        if u in seen:
+            continue
+        seen.add(u)
+        out.append(
+            {
+                "title": title,
+                "objectid": "",
+                "file_type": m.group(1).lower() if m else "",
+                "url": u,
+            }
+        )
+    return out
+
+
 _files_last_run = 0.0
 
 
-def fetch_files(force: bool = False, max_chapters: int = 10):
-    """按 课程 -> 章节 -> 附件 抓取课件文件（较重，由 sync 控制频率）。
+def fetch_files(force: bool = False):
+    """课程 -> 资料：抓取课程「资料」页里的共享资料（较重，由 sync 控制频率）。
 
-    数据来源：教师上传到课程章节里的课件/附件（knowledge/cards 页 li[data] 里的
-    objectid），不是学生个人云盘/资料里的文件。
+    数据来源：课程导航「资料」页，教师推送的课件/文档与同学共享的资料都在这里
+    （不是学生个人云盘，也不是章节卡片附件）。
     课程入口用 /visit/courselistdata（老入口 /visit/stu-learn 已 404）。
     """
     import time
@@ -293,24 +333,15 @@ def fetch_files(force: bool = False, max_chapters: int = 10):
             )
             if idx == 0:
                 save_debug("cx_studentcourse_first", page.text)
-            kids = _chapters_of(BeautifulSoup(page.text, "lxml"))
-            for kid in kids[:max_chapters]:
+            entries = _material_entry_urls(BeautifulSoup(page.text, "lxml"), base)
+            if not entries:
+                continue
+            for url in entries[:2]:
                 try:
-                    card = fetch(
-                        s,
-                        f"{base}/knowledge/cards",
-                        params={
-                            "courseid": cid,
-                            "clazzid": clz,
-                            "knowledgeId": kid,
-                            "ut": "s",
-                            "vc": "true",
-                            "mooc": "true",
-                        },
-                    )
-                    if "objectid" in card.text:
-                        save_debug(f"cx_cards_{cid}_{kid}", card.text)
-                    for f in _cards_attachments(card.text, base):
+                    mpage = page if url == page.url else fetch(s, url)
+                    if idx == 0:
+                        save_debug("cx_material_first", mpage.text)
+                    for f in _material_files(mpage.text, base):
                         f["course_name"] = cname or cid
                         files.append(f)
                 except Exception:

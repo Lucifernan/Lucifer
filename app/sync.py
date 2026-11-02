@@ -83,7 +83,7 @@ def run_sync(with_files: bool = True) -> dict:
                             "file_type": f.get("file_type", ""),
                             "url": f.get("url", ""),
                             "fetched_at": db.now(),
-                            "dedupe_key": f"cx::file::{f.get('objectid', f['title'])}",
+                            "dedupe_key": f"cx::file::{f.get('objectid') or f.get('url') or f['title']}",
                         },
                     ):
                         n += 1
