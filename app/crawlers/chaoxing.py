@@ -176,25 +176,6 @@ def fetch_interaction():
 
 
 # ---------------------------------------------------------------- 课程文件
-def _iter_courses(soup):
-    """yield (course_id, clazz_id, course_name)。"""
-    seen = set()
-    for a in soup.find_all("a", href=True):
-        if not re.search(r"courseid=", a["href"], re.I):
-            continue
-        q = urllib.parse.parse_qs(urllib.parse.urlparse(a["href"]).query)
-        cid = (q.get("courseid") or [""])[0]
-        clz = (q.get("clazzid") or [""])[0]
-        if not cid or (cid, clz) in seen:
-            continue
-        seen.add((cid, clz))
-        name = (a.get("title") or a.get_text(" ", strip=True) or "").strip()
-        if not name:
-            img = a.find("img")
-            name = (img.get("alt") if img else "") or ""
-        yield cid, clz, name[:60]
-
-
 def _chapters_of(soup):
     """从课程页提取章节 knowledgeId。"""
     kids, seen = [], set()
@@ -283,7 +264,12 @@ _files_last_run = 0.0
 
 
 def fetch_files(force: bool = False, max_chapters: int = 10):
-    """按 课程 -> 章节 -> 附件 抓取课件文件（较重，由 sync 控制频率）。"""
+    """按 课程 -> 章节 -> 附件 抓取课件文件（较重，由 sync 控制频率）。
+
+    数据来源：教师上传到课程章节里的课件/附件（knowledge/cards 页 li[data] 里的
+    objectid），不是学生个人云盘/资料里的文件。
+    课程入口用 /visit/courselistdata（老入口 /visit/stu-learn 已 404）。
+    """
     import time
 
     global _files_last_run
@@ -292,26 +278,22 @@ def fetch_files(force: bool = False, max_chapters: int = 10):
     base = config.get("chaoxing_base").rstrip("/")
     s = _session()
     files = []
-    # 课程入口
-    resp = fetch(s, f"{base}/visit/stu-learn")
-    soup = BeautifulSoup(resp.text, "lxml")
-    for cid, clz, cname in _iter_courses(soup):
+    courses = fetch_courses()
+    for idx, c in enumerate(courses):
+        cid = c.get("course_id", "")
+        clz = c.get("clazz_id", "")
+        cname = c.get("course_name", "")
+        if not cid:
+            continue
         try:
             page = fetch(
                 s,
                 f"{base}/mycourse/studentcourse",
                 params={"courseid": cid, "clazzid": clz, "ut": "s"},
             )
-            csoup = BeautifulSoup(page.text, "lxml")
-            kids = _chapters_of(csoup)
-            if not kids:
-                # 尝试另一个入口页
-                page2 = fetch(
-                    s,
-                    f"{base}/visit/stu-learn",
-                    params={"courseid": cid, "clazzid": clz},
-                )
-                kids = _chapters_of(BeautifulSoup(page2.text, "lxml"))
+            if idx == 0:
+                save_debug("cx_studentcourse_first", page.text)
+            kids = _chapters_of(BeautifulSoup(page.text, "lxml"))
             for kid in kids[:max_chapters]:
                 try:
                     card = fetch(
@@ -335,7 +317,9 @@ def fetch_files(force: bool = False, max_chapters: int = 10):
                     continue
         except Exception:
             continue
-    _files_last_run = time.time()
+    # 抓到文件才记时间，抓空则下次同步继续尝试
+    if files:
+        _files_last_run = time.time()
     return files
 
 

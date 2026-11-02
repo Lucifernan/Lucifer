@@ -88,8 +88,7 @@ def run_sync(with_files: bool = True) -> dict:
                     ):
                         n += 1
                 _summary_add(summary, "chaoxing", "files", n)
-                if files:
-                    db.log_sync("chaoxing", "ok", f"文件 {len(files)} 个，新增 {n}")
+                db.log_sync("chaoxing", "ok", f"文件 {len(files)} 个，新增 {n}")
             except Exception as e:
                 summary["errors"].append(f"超星文件: {e}")
                 db.log_sync("chaoxing", "error", str(e))
